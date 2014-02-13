@@ -1,7 +1,8 @@
 require 'thread'
 
 class ThreadPool
-  def initialize (max_clients)
+  def initialize (max_clients, mi_pelu)
+    @mi_pelu = mi_pelu
     @pool=[]
     @max_clients= max_clients
     @pool_mutex= Mutex.new
@@ -18,14 +19,17 @@ def dispatch(*args)
         @pool_cv.wait(@pool_mutex)
       end
     end
-    @pool << Thread.current
+    @pool << [Thread.current mi_pelu.ocupa_silla]
     begin
       yield *args
     rescue => e
       exception( self, e, *args)
     ensure
       @pool_mutex.synchronize do
-        @pool.delete(Thread.current)
+        @pool.delete_if do |compuesto| 
+	  mi_pelu.libera_silla compuesto[1] if compuesto[0] == Thread.current 
+	  compuesto[0] == Thread.current 
+      end
         @pool_cv.signal
       end
     end
@@ -43,3 +47,29 @@ end
       end
 end
 end
+
+class SillasVacias < Array
+
+  def initialize(total)
+    1.upto(total) { |i| self << i }
+    @pool = ThreadPool.new(total, self)
+  end
+
+  def ocupa_silla
+    self.shift
+  end
+
+  def libera_silla(number)
+    self.push(number)
+  end
+     
+  def corta(i)
+     @pool.dispatch(i)
+  end
+
+  def son_las_ocho
+    @pool.shutdown
+  end
+end
+
+
